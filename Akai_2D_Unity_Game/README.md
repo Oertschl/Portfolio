@@ -20,7 +20,7 @@ the game was structured like a software application rather than a typical game p
 - **Attack system:** [e.g. melee/ranged, hitboxes, damage handling, ...]
 
 ## Architecture
-[Download the documentation (PDF)](Docs/24_01_23_Class Diagram.pdf)
+[![Project documentation](Media/preview.png)](Docs/24_01_23_Class Diagram.pdf)
 
 ## Links
 - https://www.youtube.com/watch?v=b_sZBPVeBKo
