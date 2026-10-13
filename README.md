@@ -45,7 +45,7 @@ Portfolio/
 
 ## 3D and art work
 
-This repository focuses on code. My 3D art, animation and modeling projects (Blender and others) are on ArtStation: [ArtStation](https://www.artstation.com/oertschl)
+This repository focuses on code. My 3D art, animation and modeling projects (Blender and others) are on ArtStation: [ArtStation](https://www.artstation.com/oertschl) or on Youtube: [Youtube](https://youtube.com/@oertschl3284?si=uLinY2WPtOSZF0Is).
 
 ## Contact
 
