@@ -1,90 +1,112 @@
-# AudioVisualizer: Real-Time Music Visualization for an Interactive Music Learning App
+# Real-Time Audio Analysis & Visualization for a Music Learning App
 
-Bachelor's thesis project, Media Informatics (B.Sc.), Hochschule der Medien Stuttgart.
+**Bachelor's thesis** · Media Informatics (B.Sc.) · Hochschule der Medien Stuttgart · 2026
+**Title:** *Design and Evaluation of Audio-Analytical Methods for Real-Time Visualization of Musical Parameters in an Interactive Music Learning Application*
 
-**Thesis title:** *Konzeption und Evaluation audioanalytischer Verfahren zur Echtzeitvisualisierung musikalischer Parameter in einer interaktiven Musiklern-App*
-(Concept and evaluation of audio analysis methods for real-time visualization of musical parameters in an interactive music learning app)
+![Demo GIF](Media/demo.gif)
 
-![Gameplay / demo GIF](Media/demo.gif)
+<!-- Replace with your best GIF: the particle visualization reacting to notes in Tone -->
 
-<!-- Replace with your best GIF: the app reacting to live audio -->
+## TL;DR
 
-## What is this project?
+I extended **Tone**, a Unity-based music learning app, with a modular system that analyzes audio in real time and turns it into particle-based visual feedback. I implemented **five audio analysis methods** from scratch in C#, compared them technically (accuracy, timbre robustness, real-time cost) and tested the result in a **within-subjects user study (n = 15)**.
 
-A Unity application that analyzes audio in real time and turns musical parameters (loudness, pitch, notes, onsets, timbre) into visual feedback. The goal is to support music learning: learners should *see* what they hear and play.
+**Main finding:** no single analysis method is accurate enough to drive pitch-based visuals once the instrument changes. Real-time performance was never the problem: all methods run far inside the audio time budget. So the final system does not rely on any single detected value.
 
-The thesis answers two questions:
+> Tone is the PhD project of Willi Schorrig (second examiner of the thesis), used here as the framework for my work. This repository contains **only the code I wrote**, not the Tone app itself.
 
-1. Which audio analysis methods are suitable for real-time use in an interactive app, in terms of accuracy, latency and robustness?
-2. How should the extracted parameters be mapped to visuals so that learners understand and enjoy them?
+## What I built
 
-## Highlights
-
-- Real-time audio analysis pipeline in C# / Unity
-- Methods covered: **FFT / STFT**, **chroma features**, **RMS**, **spectral centroid**, **onset / beat detection**
-- Audio-to-visual mapping for pitch classes, notes and loudness
-- Technical evaluation: **latency**, **robustness against different timbres**, comparison of analysis methods
-- User study with **UEQ** and **AttrakDiff** questionnaires, including results by experience level, color ratings and preferences
+| Component | What it does |
+|---|---|
+| **Audio capture** | Captures PCM audio on Unity's audio thread (`OnAudioFilterRead`) and hands it to the main thread through a **double buffer** with a minimal lock |
+| **Five feature extractors** | RMS/envelope following, FFT dominant-frequency picking, chroma features, STFT band energy, onset detection (spectral flux). All behind one `IAudioFeatureExtractor` interface |
+| **Shared data contracts** | `AudioBuffer` in, `AudioFeatureFrame` out. Every method reads identical samples, so differences in results come from the method, not the input |
+| **Six visual responders** | One isolated `IVisualResponder` per method for controlled comparison, plus a `CombinedResponder` that fuses several signals for actual gameplay |
+| **Particle visualization** | A single shared Unity `ParticleSystem` per note block (size, speed, density, lifetime, hue) driven by the active responder |
+| **Evaluation tooling** | `EvaluationLogger` / `EvaluationSession` write per-note and per-frame CSV data; a session manager sends study data to a Google Sheet |
 
 ## How it works
 
 ```
-Audio input  ->  Audio filtering  ->  Analysis  ->  Parameter mapping  ->  Real-time visuals
- (file / mic)    (AudioFilter)       (FFT, STFT,      (colors, shapes,       (Unity scene)
-                                      chroma, RMS,     motion)
-                                      onsets)
+Unity audio thread                      Unity main thread
+┌────────────────────┐   double buffer  ┌──────────────────────────────────────────────┐
+│ OnAudioFilterRead  │ ───────────────► │ AudioBuffer ─► 5 extractors ─► AudioFeature- │
+│ (PCM capture only) │   (lock ~µs)     │ (+ dspTime)    (RMS, FFT,      Frame         │
+└────────────────────┘                  │                chroma, STFT,       │         │
+                                        │                onset)              ▼         │
+                                        │                         IVisualResponder     │
+                                        │                                    │         │
+                                        │                         ParticleSystem       │
+                                        │                                    ▼         │
+                                        │                         EvaluationLogger ─► CSV │
+                                        └──────────────────────────────────────────────┘
 ```
 
-1. **Audio input and filtering.** [Describe input: audio file, microphone, ...]. The `AudioFilter` module [short description: e.g. preprocessing, band filtering, windowing].
-2. **Analysis.** [Short description: e.g. the audio buffer is windowed and transformed with an FFT; from the spectrum, the dominant frequency, chroma vector and spectral centroid are derived; RMS gives loudness; onset detection reacts to note attacks.]
-3. **Mapping.** [Short description: e.g. each of the 12 pitch classes gets a color, loudness controls size/intensity, onsets trigger visual events.]
-4. **Rendering.** The `AudioVisualizer` Unity project renders the result every frame with low latency.
+Design decisions worth mentioning:
 
-See the architecture diagram in [`Docs/fig_uml.pdf`](Docs/fig_uml.pdf) and the concept overview in [`Docs/fig_concept_overview.pdf`](Docs/fig_concept_overview.pdf).
+- **Audio thread does the minimum.** It only mono-sums samples and copies them under a lock. All heavy work (FFT etc.) runs on the main thread, so there are no audio dropouts.
+- **Own FFT implementation.** A radix-2 Cooley-Tukey FFT with Hann window, written from scratch so every extractor windows and transforms the same samples.
+- **Sample-accurate timestamps.** `AudioSettings.dspTime` is captured once per audio callback and shared by all extractors, to align audio events with rendered frames.
+- **Swappable methods.** Switching the active responder is an Inspector setting. All extractors keep running either way, so logging stays comparable.
+- **Reactive, not triggered.** The visualizer listens to what the `AudioSource` actually outputs instead of reacting to the `Play()` call, which fixed a timing desync. This includes detecting note start, stop and retriggers from `isPlaying` / `timeSamples`.
+- **Performance work:** idle skip for notes that are not playing, pre-allocated FFT buffers, and a static per-clip analysis cache shared across all instances.
 
-## My role
+Full UML diagram: [`Docs/fig_uml.pdf`](Docs/fig_uml.pdf) · Concept overview: [`Docs/fig_concept_overview.pdf`](Docs/fig_concept_overview.pdf)
 
-[Solo project / Developed together with a teammate. Adjust as needed.]
+## Results
 
-- Designed the concept and the analysis pipeline
-- Implemented the audio analysis and the visualization in Unity (C#)
-- Built the evaluation setup (latency measurements, robustness tests)
-- Planned and conducted the user study and analyzed the results
-- Wrote the thesis (in English)
+### Technical evaluation
 
-## Results (short version)
+| Question | Result |
+|---|---|
+| **Is it fast enough?** | Yes. The audio-thread lock took **0.77 µs on average** against a **23,220 µs** buffer deadline. Even the worst spike (3,677 µs, attributed to OS scheduling) was 15.8% of the budget. No dropouts. |
+| **FFT peak picking** | Unreliable. On marimba, note C was misidentified with **+78.9% error** (second harmonic dominates). Other notes were about 10% low from bin quantization. |
+| **Chroma features** | Best pitch method, but not robust. Correct on 2 of 4 marimba notes. Across instruments, the same note D was detected as D# on marimba and guitar. |
+| **Onset detection** | The only timbre-robust method: **100% detection on all four instruments**, frame-exact (0 ms) on almost every tap. It carries no pitch information. |
+| **Loudness normalization** | Normalizing per clip reduced cross-instrument loudness variation from a CV of 24.1% to 21.7%. It helps but does not equalize. |
 
-[Add 3-5 concrete findings here. This is the most valuable part for recruiters. Examples of the format:]
+Based on this, the `CombinedResponder` takes **color from the known pitch class** instead of a detected value, and uses a normalized loudness "drive" plus onset bursts for size and speed.
 
-- Onset detection latency: [X ms on average]
-- Most robust method across different timbres: [method], see [`Docs/timbre_robustness_v3.pdf`](Docs/timbre_robustness_v3.pdf)
-- User study ([N] participants): [e.g. visualization rated as helpful by X%, differences between beginners and experienced players]
+### User study (within-subjects, n = 15)
+
+Old static visuals vs. the new particle system, alternating per level, compared on understandability, perceived synchronicity and overall experience.
+
+- **Pitch identification:** 9 of 15 preferred the new system, 2 the old one
+- **Perceived sync:** 7 preferred the old system, 1 the new one (discussed in the thesis: the old visual is not derived from audio, so it cannot lag)
+- **Enjoyment:** split evenly (7 vs 7). **Overall preference:** 7 Old vs 6 New, with strongly held opinions on both sides
+- **Color:** helped identify *which* note was played and was not seen as distracting, but participants were unsure it was necessary
+
+The thesis also discusses the limits honestly: small convenience sample, partly remote testing, no no-visual baseline, and some pitch errors likely caused by the pitch-shifted marimba samples rather than the methods themselves.
+
+**Selected figures:**
+[STFT spectrogram](Docs/fig_stft_spectrogram.pdf) ·
+[Chroma vectors](Docs/fig_chroma_vectors.pdf) ·
+[Onset latency](Docs/fig_onset_latency.pdf) ·
+[Lock timing](Docs/fig_lock_timing.pdf) ·
+[Timbre robustness](Docs/timbre_robustness_v3.pdf) ·
+[Survey preferences](Docs/fig_survey_preferences.pdf) ·
+[Survey by experience](Docs/fig_survey_by_experience.pdf)
 
 ## Repository structure
 
 | Folder | Content |
 |---|---|
-| `AudioVisualizer/` | Unity project code (scripts written by me) |
-| `AudioFilter/` | Audio filtering / preprocessing module |
-| `Evaluation/` | Evaluation scripts and data for latency, robustness and the user study |
-| `Docs/` | Thesis PDF and figures (UML, spectrograms, survey results, ...) |
+| `AudioFilter/` | Audio analysis layer: `AudioBuffer`, `AudioFeatureFrame`, the `IAudioFeatureExtractor` interface and the five extractors (`RmsEnvelopeFollower`, `FFTExtractor`, `ChromaExtractor`, `STFTExtractor`, `OnsetDetector`) |
+| `AudioVisualizer/` | Visualization layer: note visualizer, responders, particle system control and evaluation logging |
+| `Evaluation/` | Raw evaluation data and scripts used for the thesis figures |
+| `Docs/` | Thesis PDF and all figures |
 | `Media/` | GIFs and screenshots |
-
-## Documentation
-
-- [Full Bachelor's thesis (PDF)](Docs/Bachelorarbeit_Erik_26_08_26_unsigned.pdf)
-- Selected figures: [UML](Docs/fig_uml.pdf), [STFT spectrogram](Docs/fig_stft_spectrogram.pdf), [Onset latency](Docs/fig_onset_latency.pdf), [Survey preferences](Docs/fig_survey_preferences.pdf)
 
 ## Try it
 
-- **Build (Windows):** [Download from Releases](https://github.com/Oertschl/Portfolio/releases) <!-- add link after creating the release -->
-- **Video:** [Watch on YouTube](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
-- **Run from source:** [Unity version], open the `AudioVisualizer` folder as a project, open the scene `[SceneName]`, press Play.
+- **Playable builds (Windows and Android):** [Download from Releases](https://github.com/Oertschl/Portfolio/releases) <!-- add link after creating the release -->
+- **Thesis (PDF):** [Read the full thesis](Docs/Bachelorarbeit_Erik_26_08_26_unsigned.pdf)
 
 ## Tech stack
 
-Unity [version] · C# · Digital signal processing (FFT, STFT, chroma, RMS) · LaTeX · UEQ / AttrakDiff
+Unity 2022.3.18f1 · C# · Digital signal processing (FFT, STFT, chroma, RMS, spectral flux) · Multithreading (audio thread / main thread, double buffering) · CSV data logging · Google Forms / Apps Script · User research (within-subjects study) · LaTeX
 
 ## Contact
 
-Erik · [LinkedIn](#) · [ArtStation](#) · [Email](#)
+Erik Lindinger · [LinkedIn](#) · [ArtStation](#) · [Email](#)
