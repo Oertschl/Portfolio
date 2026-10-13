@@ -109,4 +109,4 @@ Unity 2022.3.18f1 · C# · Digital signal processing (FFT, STFT, chroma, RMS, sp
 
 ## Contact
 
-Erik Lindinger · [LinkedIn](#) · [ArtStation](#) · [Email](#)
+Erik Lindinger · [LinkedIn](https://www.linkedin.com/in/erik-lindinger-0a2832187) · [ArtStation](https://www.artstation.com/oertschl) · [Email](erik.lindinger@gmx.de)
